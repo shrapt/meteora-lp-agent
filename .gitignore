@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+build/
+.venv/
+run.log
+cache/pools/*.json
+cache/prices/*.json
+cache/top_lps/*.json
+cache/wallet_scores/*.json
+.pytest_cache/
