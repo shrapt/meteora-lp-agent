@@ -98,5 +98,7 @@ def get_top_wallets(min_score: float = 60.0, limit: int = 50) -> list[dict]:
     ]
 
 
-# Initialize on import
-init_db()
+def ensure_db() -> None:
+    """Ensure DB is initialized (idempotent)."""
+    if not DB_PATH.exists():
+        init_db()

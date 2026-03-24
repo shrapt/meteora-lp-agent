@@ -284,11 +284,20 @@ def evaluate_strategy(
         if in_range and deployed_capital > 0:
             volume = float(pool.volumes[step]) if step < len(pool.volumes) else 0
             fee_rate = pool.base_fee_bps / 10_000
-            # Simplified: fees proportional to (your_liquidity / total_pool) * volume * fee_rate
-            # Assume your share is small relative to pool
+            # Realistic model: your share of fees = (your_liquidity / total_pool_tvl) * volume * fee_rate
+            # Total pool TVL scales with the pool's volume — higher volume pools have more TVL
+            # Use volume-to-TVL ratio typical of Meteora pools (~5-15% daily turnover)
+            # So hourly volume ~ daily_vol / 24, and TVL ~ daily_vol / 0.10
+            hourly_to_daily = SIM_STEPS_PER_DAY
+            est_daily_volume = volume * hourly_to_daily
+            pool_tvl = max(est_daily_volume / 0.10, 1_000_000)  # TVL ≈ 10x daily volume
+            # Concentration bonus: tighter range captures more fees per unit liquidity
             range_width = max(upper - lower, 1e-10)
-            concentration = price / range_width  # tighter range = more concentrated
-            step_fees = volume * fee_rate * (deployed_capital / 1_000_000) * min(concentration, 10)
+            full_range = price * 2  # approximate full range width
+            concentration_mult = min(full_range / range_width, 20)  # capped at 20x
+            # Your effective liquidity share considering concentration
+            your_share = (deployed_capital * concentration_mult) / (pool_tvl + deployed_capital * concentration_mult)
+            step_fees = volume * fee_rate * your_share
             total_fees += step_fees
 
         # Compute IL for this step

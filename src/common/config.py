@@ -31,9 +31,7 @@ class Settings(BaseSettings):
     risk_profile: str = "moderate"  # conservative | moderate | aggressive
     min_wallet_score: float = 60.0
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()
