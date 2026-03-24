@@ -31,14 +31,13 @@ def strategy(
     pool_context: dict,
     state: dict,
 ) -> dict:
-    """Dynamic capital allocation based on fee-to-TVL and volatility interaction.
+    """Simplified high-fee pool exploitation strategy with reduced noise.
 
-    Key changes:
-    - Introduced fee_vol_score: interaction term between fee_to_tvl and volatility
-    - High-fee + low-vol pools get aggressive capital (safe fee capture)
-    - High-fee + high-vol pools get moderate capital (risk management)
-    - Low-fee pools scale down regardless of volatility
-    - Simplified range logic to focus on volatility-adaptive widths
+    Key changes from previous:
+    - Removed proximity_bonus (noisy signal that doesn't improve results)
+    - Consolidated capital deployment with cleaner fee-to-TVL response
+    - Kept proven fee_signal_range and fee_signal_capital logic
+    - Simplified mean_reversion calculation
     """
     pair_type = pool_context.get("pair_type", "volatile")
     volatility = pool_context.get("volatility", 0.04)
@@ -76,36 +75,30 @@ def strategy(
             trend_strength = price_change / price_start
             trend_direction = np.clip(trend_strength / 0.05, -1.0, 1.0)
 
-    # --- Fee-to-TVL profitability signal (piecewise as before) ---
+    # --- Piecewise fee-to-TVL profitability signal (aggressive for high-fee pools) ---
     fee_signal_capital = 0.0
     fee_signal_range = 0.0
     
     if fee_to_tvl > 0.05:
+        # Exceptional opportunity: very high fees
         fee_signal_capital = 0.18
         fee_signal_range = -0.0015
     elif fee_to_tvl > 0.03:
+        # High-fee pool
         fee_signal_capital = 0.12
         fee_signal_range = -0.0012
     elif fee_to_tvl > 0.015:
+        # Moderate-fee pool
         fee_signal_capital = 0.08
         fee_signal_range = -0.0008
     elif fee_to_tvl > 0.008:
+        # Normal-fee pool
         fee_signal_capital = 0.04
         fee_signal_range = -0.0004
     else:
+        # Low-fee pool
         fee_signal_capital = 0.0
         fee_signal_range = 0.0
-
-    # --- Fee-volatility interaction: penalize high-vol high-fee pools ---
-    # Normalize fee_to_tvl and volatility for scoring
-    fee_norm = np.clip(fee_to_tvl / 0.10, 0.0, 1.0)  # 0.10 is "very high"
-    vol_norm = np.clip(recent_vol / 0.08, 0.0, 1.0)   # 0.08 is "very high"
-    
-    # fee_vol_score: high when (high fee AND low vol) or (low fee AND low vol)
-    # penalty when (high fee AND high vol)
-    fee_vol_penalty = fee_norm * vol_norm * 0.08  # up to -0.08 for worst case
-    fee_vol_bonus = (1.0 - vol_norm) * fee_norm * 0.06  # up to +0.06 for best case
-    fee_vol_adjustment = fee_vol_bonus - fee_vol_penalty
 
     # --- Range width based on pair type and profitability ---
     if pair_type == "stable":
@@ -212,7 +205,7 @@ def strategy(
         lower_price = state.get("last_lower", lower_price)
         upper_price = state.get("last_upper", upper_price)
 
-    # --- Volatility-adaptive capital deployment with fee-vol interaction ---
+    # --- Volatility-adaptive capital deployment with pool-type-specific ceilings ---
     base_capital = 0.975
     
     if recent_vol < 0.020:
@@ -254,8 +247,9 @@ def strategy(
         else:
             capital_ceiling = 1.10
     
-    # Consolidated capital deployment: base + vol + profitability + mean_reversion + fee_vol_interaction
-    capital_fraction = base_capital + vol_adjustment + fee_signal_capital + mean_reversion_bonus + fee_vol_adjustment
+    # Consolidated capital deployment: base + vol + profitability + mean_reversion
+    # Removed proximity_bonus as it adds noise without improving results
+    capital_fraction = base_capital + vol_adjustment + fee_signal_capital + mean_reversion_bonus
     capital_fraction = max(0.78, min(capital_ceiling, capital_fraction))
 
     return {
